@@ -124,7 +124,6 @@ func CreateUser(email, hashedPassword string) error {
 
 	var userId string
 	res.Scan(&userId)
-	fmt.Println(userId)
 
 	db.Exec(`
 		INSERT INTO hashed_passwords (id, hashedSaltedPassword)
@@ -133,14 +132,3 @@ func CreateUser(email, hashedPassword string) error {
 
 	return nil
 }
-
-// func QueryRows() (*sql.Rows, error) {
-// 	db, err := Connect()
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	defer db.Close()
-
-// 	res, err := db.Query(`SELECT * FROM timer_entries`)
-// 	return res, err
-// }

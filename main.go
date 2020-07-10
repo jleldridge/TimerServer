@@ -120,24 +120,3 @@ func comparePasswords(hashedPwd string, plainPwd string) bool {
 	
 	return true
 }
-
-// func queryRows(w http.ResponseWriter, r *http.Request) {
-// 	fmt.Println("Querying rows")
-// 	res, err := dbActions.QueryRows()
-// 	if err != nil {
-// 		fmt.Fprintf(w, err.Error())
-// 		return
-// 	}
-
-// 	resString := ""
-// 	for res.Next() {
-// 		var id int64
-// 		var start string
-// 		var stop string
-// 		var desc string
-// 		var project string
-// 		res.Scan(&id, &start, &stop, &desc, &project)
-// 		resString += fmt.Sprintf("%d %s %s %s %s\n", id, start, stop, desc, project)
-// 	}
-// 	fmt.Fprintf(w, resString)
-// }
