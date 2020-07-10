@@ -42,7 +42,7 @@ func StartTimer(project, description string) error {
 	fmt.Println(start)
 
 	_, err = db.Exec(`
-		INSERT INTO timer_entries (project, description, start)
+		INSERT INTO timer_entries (project, description, startTime)
 		VALUES ($1, $2, $3)
 	`, project, description, start)
 	return err
@@ -61,20 +61,86 @@ func StopTimer() error {
 	// this is probably too slow in the long run
 	_, err = db.Exec(`
 		UPDATE timer_entries
-		SET stop = $1
-		WHERE stop IS NULL
+		SET stopTime = $1
+		WHERE stopTime IS NULL
 	`, stop)
 
 	return err
 }
 
-func QueryRows() (*sql.Rows, error) {
+func GetHashedPassword(email string) (string, error) {
 	db, err := Connect()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	defer db.Close()
 
-	res, err := db.Query(`SELECT * FROM timer_entries`)
-	return res, err
+	res, err := db.Query(`
+		SELECT hashed_passwords.hashedSaltedPassword
+		FROM users
+		RIGHT JOIN hashed_passwords
+		ON users.id = hashed_passwords.id
+		WHERE users.email = $1
+	`, email)
+
+	var hashedPassword string
+	res.Next()
+	res.Scan(&hashedPassword)
+
+	return hashedPassword, nil
 }
+
+func CreateUser(email, hashedPassword string) error {
+	db, err := Connect()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	res, err := db.Query(`
+		SELECT email
+		FROM users
+		WHERE email = $1
+	`, email)
+	if err != nil {
+		return err;
+	}
+
+	if res.Next() {
+		return fmt.Errorf("User %s already exists.", email)
+	}
+
+	res, err = db.Query(`
+		INSERT INTO users (email)
+		VALUES ($1)
+		RETURNING id
+	`, email)
+	if err != nil {
+		return err;
+	}
+	if !res.Next() {
+		return fmt.Errorf("Failed to create user %s", email)
+	}
+
+	var userId string
+	res.Scan(&userId)
+	fmt.Println(userId)
+
+	db.Exec(`
+		INSERT INTO hashed_passwords (id, hashedSaltedPassword)
+		VALUES ($1, $2)
+	`, userId, hashedPassword)
+
+	return nil
+}
+
+// func QueryRows() (*sql.Rows, error) {
+// 	db, err := Connect()
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	defer db.Close()
+
+// 	res, err := db.Query(`SELECT * FROM timer_entries`)
+// 	return res, err
+// }
