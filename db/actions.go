@@ -30,29 +30,6 @@ func Connect() (*sql.DB, error) {
 	return db, nil
 }
 
-func InitializeTimerTable() error {
-	db, err := Connect()
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	_, err = db.Exec(`
-		CREATE TABLE timer_entries (
-			id SERIAL PRIMARY KEY,
-			start TIMESTAMP,
-			stop TIMESTAMP,
-			project TEXT,
-			description TEXT
-		)`)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("Table successfully created")
-
-	return nil
-}
 
 func StartTimer(project, description string) error {
 	db, err := Connect()
@@ -81,6 +58,7 @@ func StopTimer() error {
 	stop := time.Now().Format("2006-01-02 15:04:05")
 	fmt.Println(stop)
 
+	// this is probably too slow in the long run
 	_, err = db.Exec(`
 		UPDATE timer_entries
 		SET stop = $1
