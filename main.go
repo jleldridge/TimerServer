@@ -13,9 +13,12 @@ import (
 )
 
 type TimerParams struct {
-	UserID int `json:"userId"`
 	Project string `json:"project"`
 	Description string `json:"description"`
+}
+
+type UpdatePasswordParams struct {
+	NewPassword string `json:"newPassword"`
 }
 
 type UserIDResponse struct {
@@ -29,36 +32,12 @@ func main() {
 	r.HandleFunc("/newUser", createUser).Methods("POST")
 
 	// authorized paths
-	r.HandleFunc("/login", basicAuth(login)).Methods("GET")
 	r.HandleFunc("/start", basicAuth(startTimer)).Methods("POST")
 	r.HandleFunc("/stop", basicAuth(stopTimer)).Methods("POST")
 	r.HandleFunc("/updatePassword", basicAuth(updateUserPassword)).Methods("POST")
 
 	fmt.Println("Server started!")
 	log.Fatal(http.ListenAndServe(":10000", r))
-}
-
-func login (w http.ResponseWriter, r *http.Request) {
-	user, _, ok := r.BasicAuth()
-	
-	if !ok {
-		w.WriteHeader(404)
-		fmt.Fprintf(w, "User not found")
-	}
-
-	userId, err := dbActions.GetUserID(user)
-	if err != nil {
-		fmt.Fprintf(w, err.Error())
-	}
-
-	js, err := json.Marshal(UserIDResponse{userId})
-  if err != nil {
-    http.Error(w, err.Error(), http.StatusInternalServerError)
-    return
-  }
-
-  w.Header().Set("Content-Type", "application/json")
-  w.Write(js)
 }
 
 func startTimer (w http.ResponseWriter, r *http.Request) {
@@ -70,12 +49,13 @@ func startTimer (w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if data.UserID == 0 {
+	user, _, ok := r.BasicAuth()
+	if !ok {
 		w.WriteHeader(400)
 		return
 	}
 
-	err = dbActions.StartTimer(data.UserID, data.Project, data.Description)
+	err = dbActions.StartTimer(user, data.Project, data.Description)
 	if err != nil {
 		fmt.Fprintf(w, err.Error())
 		return
@@ -85,20 +65,13 @@ func startTimer (w http.ResponseWriter, r *http.Request) {
 }
 
 func stopTimer (w http.ResponseWriter, r *http.Request) {
-	decoder := json.NewDecoder(r.Body)
-	var data TimerParams
-	err := decoder.Decode(&data)
-	if err != nil {
-		fmt.Fprintf(w, err.Error())
-		return
-	}
-
-	if data.UserID == 0 {
+	user, _, ok := r.BasicAuth()
+	if !ok {
 		w.WriteHeader(400)
 		return
 	}
 
-	err = dbActions.StopTimer(data.UserID)
+	err := dbActions.StopTimer(user)
 	if err != nil {
 		fmt.Fprintf(w, err.Error())
 		return
@@ -113,8 +86,6 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(400)
 		return
 	}
-	
-	fmt.Printf("Creating user %s with password %s\n", user, pass)
 
 	err := dbActions.CreateUser(user, hashAndSalt([]byte(pass)))
 	if err != nil {
@@ -126,6 +97,29 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func updateUserPassword(w http.ResponseWriter, r *http.Request) {
+	decoder := json.NewDecoder(r.Body)
+	var data UpdatePasswordParams
+	err := decoder.Decode(&data)
+	if err != nil {
+		fmt.Fprintf(w, err.Error())
+		return
+	}
+
+	user, _, ok := r.BasicAuth()
+	if !ok {
+		w.WriteHeader(400)
+		return
+	}
+
+	if data.NewPassword == "" {
+		w.WriteHeader(400)
+		fmt.Fprintf(w, "newPassword param required")
+	}
+
+	err = dbActions.UpdateUserPassword(user, hashAndSalt([]byte(data.NewPassword)))
+	if err != nil {
+		fmt.Fprintf(w, err.Error())
+	}
 }
 
 func basicAuth(handler http.HandlerFunc) http.HandlerFunc {

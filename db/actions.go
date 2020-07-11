@@ -31,12 +31,17 @@ func Connect() (*sql.DB, error) {
 }
 
 
-func StartTimer(userId int, project, description string) error {
+func StartTimer(email, project, description string) error {
 	db, err := Connect()
 	if err != nil {
 		return err
 	}
 	defer db.Close()
+
+	userId, err := GetUserID(email)
+	if err != nil {
+		return err
+	}
 
 	start := time.Now().Format("2006-01-02 15:04:05")
 
@@ -47,12 +52,17 @@ func StartTimer(userId int, project, description string) error {
 	return err
 }
 
-func StopTimer(userId int) error {
+func StopTimer(email string) error {
 	db, err := Connect()
 	if err != nil {
 		return err
 	}
 	defer db.Close()
+
+	userId, err := GetUserID(email)
+	if err != nil {
+		return err
+	}
 
 	stop := time.Now().Format("2006-01-02 15:04:05")
 
@@ -130,6 +140,28 @@ func CreateUser(email, hashedPassword string) error {
 
 	return nil
 }
+
+func UpdateUserPassword(email, newHashedPassword string) error {
+	db, err := Connect()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	userId, err := GetUserID(email)
+	if err != nil {
+		return fmt.Errorf("user %s not found", email)
+	}
+
+	db.Exec(`
+		UPDATE hashed_passwords
+		set hashedSaltedPassword = $1
+		WHERE id = $2
+	`, newHashedPassword, userId)
+
+	return nil
+}
+
 
 func GetUserID(email string) (int, error){
 	db, err := Connect()
