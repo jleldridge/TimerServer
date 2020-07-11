@@ -4,24 +4,32 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	// "encoding/base64"
+	"encoding/json"
+
 	"golang.org/x/crypto/bcrypt"
 	dbActions "github.com/jleldridge/gotimerapp/db"
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
 )
 
-func main() {
-	handleRequests()
+type TimerParams struct {
+	UserID int `json:"userId"`
+	Project string `json:"project"`
+	Description string `json:"description"`
 }
 
-func handleRequests() {
+type UserIDResponse struct {
+	UserID int `json:"userId"`
+}
+
+func main() {
 	r := mux.NewRouter()
 
 	// unauthorized paths
 	r.HandleFunc("/newUser", createUser).Methods("POST")
 
 	// authorized paths
+	r.HandleFunc("/login", basicAuth(login)).Methods("GET")
 	r.HandleFunc("/start", basicAuth(startTimer)).Methods("POST")
 	r.HandleFunc("/stop", basicAuth(stopTimer)).Methods("POST")
 	r.HandleFunc("/updatePassword", basicAuth(updateUserPassword)).Methods("POST")
@@ -30,26 +38,67 @@ func handleRequests() {
 	log.Fatal(http.ListenAndServe(":10000", r))
 }
 
-func requirePassword () {
+func login (w http.ResponseWriter, r *http.Request) {
+	user, _, ok := r.BasicAuth()
 	
+	if !ok {
+		w.WriteHeader(404)
+		fmt.Fprintf(w, "User not found")
+	}
+
+	userId, err := dbActions.GetUserID(user)
+	if err != nil {
+		fmt.Fprintf(w, err.Error())
+	}
+
+	js, err := json.Marshal(UserIDResponse{userId})
+  if err != nil {
+    http.Error(w, err.Error(), http.StatusInternalServerError)
+    return
+  }
+
+  w.Header().Set("Content-Type", "application/json")
+  w.Write(js)
 }
 
 func startTimer (w http.ResponseWriter, r *http.Request) {
-	project := "test"
-	description := "test description"
-	fmt.Println("Received start request")
-	err := dbActions.StartTimer(project, description)
+	decoder := json.NewDecoder(r.Body)
+	var data TimerParams
+	err := decoder.Decode(&data)
 	if err != nil {
 		fmt.Fprintf(w, err.Error())
 		return
 	}
 
-	fmt.Fprintf(w, "Timer %s %s started.", project, description)
+	if data.UserID == 0 {
+		w.WriteHeader(400)
+		return
+	}
+
+	err = dbActions.StartTimer(data.UserID, data.Project, data.Description)
+	if err != nil {
+		fmt.Fprintf(w, err.Error())
+		return
+	}
+
+	fmt.Fprintf(w, "Timer %s %s started.", data.Project, data.Description)
 }
 
 func stopTimer (w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Received stop request")
-	err := dbActions.StopTimer()
+	decoder := json.NewDecoder(r.Body)
+	var data TimerParams
+	err := decoder.Decode(&data)
+	if err != nil {
+		fmt.Fprintf(w, err.Error())
+		return
+	}
+
+	if data.UserID == 0 {
+		w.WriteHeader(400)
+		return
+	}
+
+	err = dbActions.StopTimer(data.UserID)
 	if err != nil {
 		fmt.Fprintf(w, err.Error())
 		return
@@ -77,7 +126,6 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func updateUserPassword(w http.ResponseWriter, r *http.Request) {
-
 }
 
 func basicAuth(handler http.HandlerFunc) http.HandlerFunc {

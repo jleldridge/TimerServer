@@ -31,7 +31,7 @@ func Connect() (*sql.DB, error) {
 }
 
 
-func StartTimer(project, description string) error {
+func StartTimer(userId int, project, description string) error {
 	db, err := Connect()
 	if err != nil {
 		return err
@@ -39,16 +39,15 @@ func StartTimer(project, description string) error {
 	defer db.Close()
 
 	start := time.Now().Format("2006-01-02 15:04:05")
-	fmt.Println(start)
 
 	_, err = db.Exec(`
-		INSERT INTO timer_entries (project, description, startTime)
-		VALUES ($1, $2, $3)
-	`, project, description, start)
+		INSERT INTO timer_entries (project, description, startTime, userId)
+		VALUES ($1, $2, $3, $4)
+	`, project, description, start, userId)
 	return err
 }
 
-func StopTimer() error {
+func StopTimer(userId int) error {
 	db, err := Connect()
 	if err != nil {
 		return err
@@ -56,14 +55,13 @@ func StopTimer() error {
 	defer db.Close()
 
 	stop := time.Now().Format("2006-01-02 15:04:05")
-	fmt.Println(stop)
 
-	// this is probably too slow in the long run
 	_, err = db.Exec(`
 		UPDATE timer_entries
 		SET stopTime = $1
 		WHERE stopTime IS NULL
-	`, stop)
+			AND userId = $2
+	`, stop, userId)
 
 	return err
 }
@@ -131,4 +129,29 @@ func CreateUser(email, hashedPassword string) error {
 	`, userId, hashedPassword)
 
 	return nil
+}
+
+func GetUserID(email string) (int, error){
+	db, err := Connect()
+	if err != nil {
+		return -1, err
+	}
+	defer db.Close()
+
+	res, err := db.Query(`
+		SELECT id 
+		FROM users
+		WHERE email = $1
+	`, email)
+	if err != nil {
+		return -1, err
+	}
+
+	if !res.Next() {
+		return -1, fmt.Errorf("user %s not found", email)
+	}
+
+	var id int
+	res.Scan(&id)
+	return id, nil
 }
