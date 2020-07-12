@@ -31,14 +31,8 @@ func Connect() (*sql.DB, error) {
 }
 
 
-func StartTimer(email, project, description string) error {
-	db, err := Connect()
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	userId, err := GetUserID(email)
+func StartTimer(db *sql.DB, email, project, description string) error {
+	userId, err := GetUserID(db, email)
 	if err != nil {
 		return err
 	}
@@ -52,14 +46,8 @@ func StartTimer(email, project, description string) error {
 	return err
 }
 
-func StopTimer(email string) error {
-	db, err := Connect()
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	userId, err := GetUserID(email)
+func StopTimer(db *sql.DB, email string) error {
+	userId, err := GetUserID(db, email)
 	if err != nil {
 		return err
 	}
@@ -76,13 +64,7 @@ func StopTimer(email string) error {
 	return err
 }
 
-func GetHashedPassword(email string) (string, error) {
-	db, err := Connect()
-	if err != nil {
-		return "", err
-	}
-	defer db.Close()
-
+func GetHashedPassword(db *sql.DB, email string) (string, error) {
 	res, err := db.Query(`
 		SELECT hashed_passwords.hashedSaltedPassword
 		FROM users
@@ -90,6 +72,10 @@ func GetHashedPassword(email string) (string, error) {
 		ON users.id = hashed_passwords.id
 		WHERE users.email = $1
 	`, email)
+	if err != nil {
+		return "", err
+	}
+	defer res.Close()
 
 	var hashedPassword string
 	res.Next()
@@ -98,14 +84,8 @@ func GetHashedPassword(email string) (string, error) {
 	return hashedPassword, nil
 }
 
-func CreateUser(email, hashedPassword string) error {
-	db, err := Connect()
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	res, err := db.Query(`
+func CreateUser(db *sql.DB, email, hashedPassword string) error {
+	existingUserRes, err := db.Query(`
 		SELECT email
 		FROM users
 		WHERE email = $1
@@ -113,12 +93,13 @@ func CreateUser(email, hashedPassword string) error {
 	if err != nil {
 		return err;
 	}
+	defer existingUserRes.Close()
 
-	if res.Next() {
+	if existingUserRes.Next() {
 		return fmt.Errorf("User %s already exists.", email)
 	}
 
-	res, err = db.Query(`
+	newUserRes, err := db.Query(`
 		INSERT INTO users (email)
 		VALUES ($1)
 		RETURNING id
@@ -126,12 +107,14 @@ func CreateUser(email, hashedPassword string) error {
 	if err != nil {
 		return err;
 	}
-	if !res.Next() {
+	defer newUserRes.Close()
+
+	if !newUserRes.Next() {
 		return fmt.Errorf("Failed to create user %s", email)
 	}
 
 	var userId string
-	res.Scan(&userId)
+	newUserRes.Scan(&userId)
 
 	db.Exec(`
 		INSERT INTO hashed_passwords (id, hashedSaltedPassword)
@@ -141,14 +124,8 @@ func CreateUser(email, hashedPassword string) error {
 	return nil
 }
 
-func UpdateUserPassword(email, newHashedPassword string) error {
-	db, err := Connect()
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	userId, err := GetUserID(email)
+func UpdateUserPassword(db *sql.DB, email, newHashedPassword string) error {
+	userId, err := GetUserID(db, email)
 	if err != nil {
 		return fmt.Errorf("user %s not found", email)
 	}
@@ -163,13 +140,7 @@ func UpdateUserPassword(email, newHashedPassword string) error {
 }
 
 
-func GetUserID(email string) (int, error){
-	db, err := Connect()
-	if err != nil {
-		return -1, err
-	}
-	defer db.Close()
-
+func GetUserID(db *sql.DB, email string) (int, error){
 	res, err := db.Query(`
 		SELECT id 
 		FROM users
@@ -178,6 +149,7 @@ func GetUserID(email string) (int, error){
 	if err != nil {
 		return -1, err
 	}
+	defer res.Close()
 
 	if !res.Next() {
 		return -1, fmt.Errorf("user %s not found", email)
